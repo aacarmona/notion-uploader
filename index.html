@@ -323,12 +323,34 @@
         </div>
 
         <div class="help-section">
-            <h3>📚 How it works</h3>
+            <h3>📚 Markdown Support</h3>
             <p>
-                This version uses <strong>Netlify Functions</strong> to bypass CORS issues. Your credentials are sent securely to a serverless function that communicates with Notion.<br><br>
-                <strong>Math Support:</strong> Use <code>$inline$</code> for inline equations and <code>$$block$$</code> for block equations.<br>
-                <strong>Get Token:</strong> Visit <a href="https://www.notion.so/my-integrations" target="_blank">notion.so/my-integrations</a><br>
-                <strong>Page ID:</strong> Copy from your Notion page URL (part after the last dash)
+                This version supports <strong>full Markdown formatting</strong>:<br><br>
+                <strong>Text Formatting:</strong><br>
+                • <code>**bold text**</code> → <strong>bold text</strong><br>
+                • <code>*italic text*</code> → <em>italic text</em><br>
+                • <code>`code text`</code> → <code>code text</code><br>
+                • <code>[link text](https://example.com)</code> → <a href="#">link text</a><br><br>
+                
+                <strong>Structure:</strong><br>
+                • <code># Header 1</code>, <code>## Header 2</code>, <code>### Header 3</code><br>
+                • <code>- Bullet list</code> or <code>* Bullet list</code><br>
+                • <code>1. Numbered list</code><br>
+                • <code>> Quote text</code><br>
+                • <code>---</code> → Horizontal divider<br><br>
+                
+                <strong>Code Blocks:</strong><br>
+                <code>```javascript<br>
+                const example = "code block";<br>
+                ```</code><br><br>
+                
+                <strong>Math:</strong><br>
+                • <code>$E = mc^2$</code> → inline equation<br>
+                • <code>$\int x dx$</code> → block equation<br><br>
+                
+                <strong>Setup:</strong><br>
+                Get token: <a href="https://www.notion.so/my-integrations" target="_blank">notion.so/my-integrations</a><br>
+                Page ID: Copy from Notion URL (after last dash)
             </p>
         </div>
     </div>
