@@ -326,25 +326,25 @@ function processTextFormatting(text) {
   const parts = [];
   let currentIndex = 0;
   
-  // Regex patterns for different formatting (sin incluir $ para matemáticas)
+  // FIXED: Regex patterns más robustos que manejan matemáticas internas
   const patterns = [
     { 
-      regex: /\*\*([^*\n]+?)\*\*/g, 
+      regex: /\*\*([^*\r\n]*?)\*\*/g, 
       format: { bold: true },
       type: 'bold'
     },
     { 
-      regex: /(?<!\*)\*([^*\n]+?)\*(?!\*)/g, 
+      regex: /(?<!\*)\*([^*\r\n]*?)\*(?!\*)/g, 
       format: { italic: true },
       type: 'italic'
     },
     { 
-      regex: /`([^`\n]+?)`/g, 
+      regex: /`([^`\r\n]*?)`/g, 
       format: { code: true },
       type: 'code'
     },
     {
-      regex: /\[([^\]]+?)\]\(([^)\n]+?)\)/g,
+      regex: /\[([^\]\r\n]*?)\]\(([^)\r\n]*?)\)/g,
       format: null,
       type: 'link'
     }
@@ -403,25 +403,61 @@ function processTextFormatting(text) {
       }
     }
     
-    // Add the formatted text
+    // Add the formatted text - FIXED: Procesar matemáticas dentro del formato
     if (match.type === 'link') {
-      parts.push({
-        type: "text",
-        text: {
-          content: match.content,
-          link: {
-            url: match.url
+      // Para enlaces, procesamos matemáticas en el texto del enlace
+      const linkTextParts = processInlineMathInText(match.content);
+      if (linkTextParts.length === 1 && linkTextParts[0].type === "text") {
+        parts.push({
+          type: "text",
+          text: {
+            content: linkTextParts[0].text.content,
+            link: {
+              url: match.url
+            }
           }
-        }
-      });
+        });
+      } else {
+        // Si hay matemáticas en el enlace, usamos solo texto plano
+        parts.push({
+          type: "text",
+          text: {
+            content: match.content,
+            link: {
+              url: match.url
+            }
+          }
+        });
+      }
     } else {
-      parts.push({
-        type: "text",
-        text: {
-          content: match.content
-        },
-        annotations: match.format
-      });
+      // Para negrita, cursiva, código - procesamos matemáticas internas
+      const contentParts = processInlineMathInText(match.content);
+      
+      if (contentParts.length === 1 && contentParts[0].type === "text") {
+        // No hay matemáticas, aplicamos formato normalmente
+        parts.push({
+          type: "text",
+          text: {
+            content: contentParts[0].text.content
+          },
+          annotations: match.format
+        });
+      } else {
+        // Hay matemáticas dentro del formato - dividir en partes
+        contentParts.forEach(part => {
+          if (part.type === "equation") {
+            parts.push(part); // Ecuación sin formato
+          } else {
+            parts.push({
+              type: "text",
+              text: {
+                content: part.text.content
+              },
+              annotations: match.format // Aplicar formato a texto
+            });
+          }
+        });
+      }
     }
     
     lastEnd = match.end;
@@ -442,6 +478,48 @@ function processTextFormatting(text) {
   
   // If no formatting was found, return simple text
   if (parts.length === 0 && text.trim()) {
+    parts.push({
+      type: "text",
+      text: {
+        content: text
+      }
+    });
+  }
+  
+  return parts;
+}
+
+// NUEVA: Función auxiliar para procesar matemáticas inline en un texto
+function processInlineMathInText(text) {
+  const parts = [];
+  const segments = text.split(/\$([^$\r\n]*?)\$/g);
+  
+  for (let i = 0; i < segments.length; i++) {
+    if (i % 2 === 0) {
+      // Texto normal
+      if (segments[i]) {
+        parts.push({
+          type: "text",
+          text: {
+            content: segments[i]
+          }
+        });
+      }
+    } else {
+      // Ecuación matemática
+      if (segments[i] !== undefined) {
+        parts.push({
+          type: "equation",
+          equation: {
+            expression: segments[i].trim()
+          }
+        });
+      }
+    }
+  }
+  
+  // Si no hay matemáticas, devolver como texto simple
+  if (parts.length === 0) {
     parts.push({
       type: "text",
       text: {
