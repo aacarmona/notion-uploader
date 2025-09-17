@@ -89,7 +89,7 @@ export default async (request, context) => {
   }
 };
 
-// Función para parsear Markdown con matemáticas
+// Función para parsear Markdown completo
 function parseMarkdownWithMath(markdownContent) {
   const blocks = [];
   const lines = markdownContent.split('\n');
@@ -98,16 +98,16 @@ function parseMarkdownWithMath(markdownContent) {
   while (i < lines.length) {
     const line = lines[i].trim();
 
-    // Handle math blocks ($$...$$)
-    if (line.startsWith('$$')) {
+    // Handle math blocks ($...$)
+    if (line.startsWith('$')) {
       const mathContent = [];
       i++;
-      while (i < lines.length && !lines[i].trim().endsWith('$$')) {
+      while (i < lines.length && !lines[i].trim().endsWith('$')) {
         mathContent.push(lines[i]);
         i++;
       }
       if (i < lines.length) {
-        const lastLine = lines[i].replace('$$', '').trim();
+        const lastLine = lines[i].replace('$', '').trim();
         if (lastLine) {
           mathContent.push(lastLine);
         }
@@ -119,6 +119,41 @@ function parseMarkdownWithMath(markdownContent) {
         equation: {
           expression: mathContent.join('\n').trim()
         }
+      });
+    }
+    // Handle code blocks (```...```)
+    else if (line.startsWith('```')) {
+      const codeContent = [];
+      const language = line.replace('```', '').trim() || 'plain text';
+      i++;
+      while (i < lines.length && !lines[i].trim().startsWith('```')) {
+        codeContent.push(lines[i]);
+        i++;
+      }
+
+      blocks.push({
+        object: "block",
+        type: "code",
+        code: {
+          caption: [],
+          rich_text: [
+            {
+              type: "text",
+              text: {
+                content: codeContent.join('\n')
+              }
+            }
+          ],
+          language: language
+        }
+      });
+    }
+    // Handle horizontal dividers (---)
+    else if (line === '---' || line === '***' || line === '___') {
+      blocks.push({
+        object: "block",
+        type: "divider",
+        divider: {}
       });
     }
     // Handle headers
@@ -133,17 +168,50 @@ function parseMarkdownWithMath(markdownContent) {
         object: "block",
         type: blockType,
         [blockType]: {
-          rich_text: processInlineMath(text)
+          rich_text: processRichText(text)
+        }
+      });
+    }
+    // Handle unordered lists (- item)
+    else if (line.startsWith('- ') || line.startsWith('* ')) {
+      const text = line.replace(/^[-*]\s+/, '');
+      blocks.push({
+        object: "block",
+        type: "bulleted_list_item",
+        bulleted_list_item: {
+          rich_text: processRichText(text)
+        }
+      });
+    }
+    // Handle ordered lists (1. item)
+    else if (/^\d+\.\s/.test(line)) {
+      const text = line.replace(/^\d+\.\s+/, '');
+      blocks.push({
+        object: "block",
+        type: "numbered_list_item",
+        numbered_list_item: {
+          rich_text: processRichText(text)
+        }
+      });
+    }
+    // Handle quotes (> text)
+    else if (line.startsWith('> ')) {
+      const text = line.replace(/^>\s+/, '');
+      blocks.push({
+        object: "block",
+        type: "quote",
+        quote: {
+          rich_text: processRichText(text)
         }
       });
     }
     // Handle regular paragraphs
-    else if (line && !line.startsWith('$$')) {
+    else if (line && !line.startsWith('$')) {
       blocks.push({
         object: "block",
         type: "paragraph",
         paragraph: {
-          rich_text: processInlineMath(line)
+          rich_text: processRichText(line)
         }
       });
     }
@@ -164,29 +232,160 @@ function parseMarkdownWithMath(markdownContent) {
   return blocks;
 }
 
-function processInlineMath(text) {
+// Función completa para procesar texto enriquecido
+function processRichText(text) {
   const richText = [];
-  const parts = text.split(/\$([^$]+)\$/);
-
-  for (let i = 0; i < parts.length; i++) {
+  
+  // Split por ecuaciones matemáticas primero
+  const mathParts = text.split(/\$([^$]+)\$/);
+  
+  for (let i = 0; i < mathParts.length; i++) {
     if (i % 2 === 0) { // Regular text
-      if (parts[i]) {
-        richText.push({
-          type: "text",
-          text: {
-            content: parts[i]
-          }
-        });
+      if (mathParts[i]) {
+        // Procesar formato de texto en esta parte
+        const textParts = processTextFormatting(mathParts[i]);
+        richText.push(...textParts);
       }
     } else { // Math equation
       richText.push({
         type: "equation",
         equation: {
-          expression: parts[i].trim()
+          expression: mathParts[i].trim()
         }
       });
     }
   }
 
   return richText;
+}
+
+function processTextFormatting(text) {
+  const parts = [];
+  let currentIndex = 0;
+  
+  // Regex patterns for different formatting
+  const patterns = [
+    { 
+      regex: /\*\*([^*]+)\*\*/g, 
+      format: { bold: true },
+      type: 'bold'
+    },
+    { 
+      regex: /\*([^*]+)\*/g, 
+      format: { italic: true },
+      type: 'italic'
+    },
+    { 
+      regex: /`([^`]+)`/g, 
+      format: { code: true },
+      type: 'code'
+    },
+    {
+      regex: /\[([^\]]+)\]\(([^)]+)\)/g,
+      format: null,
+      type: 'link'
+    }
+  ];
+  
+  // Find all matches and their positions
+  const matches = [];
+  
+  patterns.forEach(pattern => {
+    let match;
+    const regex = new RegExp(pattern.regex.source, pattern.regex.flags);
+    
+    while ((match = regex.exec(text)) !== null) {
+      matches.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        content: match[1],
+        fullMatch: match[0],
+        format: pattern.format,
+        type: pattern.type,
+        url: match[2] || null // For links
+      });
+    }
+  });
+  
+  // Sort matches by start position
+  matches.sort((a, b) => a.start - b.start);
+  
+  // Remove overlapping matches (keep the first one)
+  const validMatches = [];
+  for (let i = 0; i < matches.length; i++) {
+    const current = matches[i];
+    const hasOverlap = validMatches.some(existing => 
+      (current.start < existing.end && current.end > existing.start)
+    );
+    
+    if (!hasOverlap) {
+      validMatches.push(current);
+    }
+  }
+  
+  // Build rich text array
+  let lastEnd = 0;
+  
+  validMatches.forEach(match => {
+    // Add text before this match
+    if (match.start > lastEnd) {
+      const beforeText = text.substring(lastEnd, match.start);
+      if (beforeText) {
+        parts.push({
+          type: "text",
+          text: {
+            content: beforeText
+          }
+        });
+      }
+    }
+    
+    // Add the formatted text
+    if (match.type === 'link') {
+      parts.push({
+        type: "text",
+        text: {
+          content: match.content,
+          link: {
+            url: match.url
+          }
+        }
+      });
+    } else {
+      parts.push({
+        type: "text",
+        text: {
+          content: match.content
+        },
+        annotations: match.format
+      });
+    }
+    
+    lastEnd = match.end;
+  });
+  
+  // Add remaining text
+  if (lastEnd < text.length) {
+    const remainingText = text.substring(lastEnd);
+    if (remainingText) {
+      parts.push({
+        type: "text",
+        text: {
+          content: remainingText
+        }
+      });
+    }
+  }
+  
+  // If no formatting was found, return simple text
+  if (parts.length === 0 && text.trim()) {
+    parts.push({
+      type: "text",
+      text: {
+        content: text
+      }
+    });
+  }
+  
+  return parts;
 }
