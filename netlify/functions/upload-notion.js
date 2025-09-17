@@ -236,23 +236,53 @@ function parseMarkdownWithMath(markdownContent) {
 function processRichText(text) {
   const richText = [];
   
-  // Split por ecuaciones matemáticas primero
-  const mathParts = text.split(/\$([^$]+)\$/);
+  // Primero, encontrar todas las ecuaciones matemáticas y reemplazarlas temporalmente
+  const mathPlaceholders = [];
+  let tempText = text;
+  let mathIndex = 0;
   
-  for (let i = 0; i < mathParts.length; i++) {
-    if (i % 2 === 0) { // Regular text
-      if (mathParts[i]) {
-        // Procesar formato de texto en esta parte
-        const textParts = processTextFormatting(mathParts[i]);
-        richText.push(...textParts);
-      }
-    } else { // Math equation
-      richText.push({
-        type: "equation",
-        equation: {
-          expression: mathParts[i].trim()
+  // Reemplazar ecuaciones matemáticas con placeholders
+  tempText = tempText.replace(/\$([^$\n]+)\$/g, (match, equation) => {
+    const placeholder = `__MATH_${mathIndex}__`;
+    mathPlaceholders[mathIndex] = equation.trim();
+    mathIndex++;
+    return placeholder;
+  });
+  
+  // Procesar formato de texto en el texto sin matemáticas
+  const textParts = processTextFormatting(tempText);
+  
+  // Restaurar las ecuaciones matemáticas
+  for (const part of textParts) {
+    if (part.type === "text" && part.text.content.includes('__MATH_')) {
+      // Dividir por placeholders de matemáticas
+      const segments = part.text.content.split(/(__MATH_\d+__)/);
+      
+      for (const segment of segments) {
+        if (segment.startsWith('__MATH_') && segment.endsWith('__')) {
+          // Es un placeholder de matemática
+          const index = parseInt(segment.match(/\d+/)[0]);
+          if (mathPlaceholders[index]) {
+            richText.push({
+              type: "equation",
+              equation: {
+                expression: mathPlaceholders[index]
+              }
+            });
+          }
+        } else if (segment) {
+          // Es texto normal
+          richText.push({
+            type: "text",
+            text: {
+              content: segment
+            },
+            annotations: part.annotations || {}
+          });
         }
-      });
+      }
+    } else {
+      richText.push(part);
     }
   }
 
@@ -263,25 +293,25 @@ function processTextFormatting(text) {
   const parts = [];
   let currentIndex = 0;
   
-  // Regex patterns for different formatting
+  // Regex patterns for different formatting (sin incluir $ para matemáticas)
   const patterns = [
     { 
-      regex: /\*\*([^*]+)\*\*/g, 
+      regex: /\*\*([^*\n]+?)\*\*/g, 
       format: { bold: true },
       type: 'bold'
     },
     { 
-      regex: /\*([^*]+)\*/g, 
+      regex: /(?<!\*)\*([^*\n]+?)\*(?!\*)/g, 
       format: { italic: true },
       type: 'italic'
     },
     { 
-      regex: /`([^`]+)`/g, 
+      regex: /`([^`\n]+?)`/g, 
       format: { code: true },
       type: 'code'
     },
     {
-      regex: /\[([^\]]+)\]\(([^)]+)\)/g,
+      regex: /\[([^\]]+?)\]\(([^)\n]+?)\)/g,
       format: null,
       type: 'link'
     }
