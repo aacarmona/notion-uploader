@@ -21,8 +21,8 @@ export default async (request, context) => {
     // Parsear markdown a bloques de Notion
     const blocks = parseMarkdownWithMath(markdownContent);
     
-    // Crear el payload para la API de Notion
-    const notionPayload = {
+    // Crear la página primero (sin children para evitar límite de 100)
+    const pagePayload = {
       parent: { page_id: parentPageId },
       properties: {
         title: {
@@ -34,29 +34,27 @@ export default async (request, context) => {
             }
           ]
         }
-      },
-      children: blocks
+      }
     };
 
-    // Llamar a la API de Notion desde el servidor
-    const response = await fetch('https://api.notion.com/v1/pages', {
+    // Crear página vacía
+    const pageResponse = await fetch('https://api.notion.com/v1/pages', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${notionToken}`,
         'Content-Type': 'application/json',
         'Notion-Version': '2022-06-28'
       },
-      body: JSON.stringify(notionPayload)
+      body: JSON.stringify(pagePayload)
     });
 
-    const responseData = await response.text();
-    
-    if (!response.ok) {
-      console.error('Notion API Error:', response.status, responseData);
+    if (!pageResponse.ok) {
+      const errorData = await pageResponse.text();
+      console.error('Notion API Error creating page:', pageResponse.status, errorData);
       return new Response(JSON.stringify({ 
-        error: `Notion API Error: ${response.status} - ${responseData}` 
+        error: `Notion API Error: ${pageResponse.status} - ${errorData}` 
       }), {
-        status: response.status,
+        status: pageResponse.status,
         headers: { 
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*'
@@ -64,7 +62,42 @@ export default async (request, context) => {
       });
     }
 
-    const result = JSON.parse(responseData);
+    const pageResult = await pageResponse.json();
+    const pageId = pageResult.id;
+
+    // Agregar bloques en lotes de 100
+    const batchSize = 100;
+    for (let i = 0; i < blocks.length; i += batchSize) {
+      const batch = blocks.slice(i, i + batchSize);
+      
+      const appendResponse = await fetch(`https://api.notion.com/v1/blocks/${pageId}/children`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${notionToken}`,
+          'Content-Type': 'application/json',
+          'Notion-Version': '2022-06-28'
+        },
+        body: JSON.stringify({
+          children: batch
+        })
+      });
+
+      if (!appendResponse.ok) {
+        const errorData = await appendResponse.text();
+        console.error('Notion API Error appending blocks:', appendResponse.status, errorData);
+        return new Response(JSON.stringify({ 
+          error: `Notion API Error appending blocks: ${appendResponse.status} - ${errorData}` 
+        }), {
+          status: appendResponse.status,
+          headers: { 
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*'
+          }
+        });
+      }
+    }
+
+    const result = pageResult;
     
     // Devolver resultado exitoso
     return new Response(JSON.stringify(result), {
@@ -89,7 +122,7 @@ export default async (request, context) => {
   }
 };
 
-// FIXED: Función para parsear Markdown completo con math corregido
+// Función para parsear Markdown completo
 function parseMarkdownWithMath(markdownContent) {
   const blocks = [];
   const lines = markdownContent.split('\n');
@@ -98,48 +131,30 @@ function parseMarkdownWithMath(markdownContent) {
   while (i < lines.length) {
     const line = lines[i].trim();
 
-    // FIXED: Handle math blocks ($$...$$) - display math
-    if (line.startsWith('$$')) {
+    // Handle math blocks ($...$)
+    if (line.startsWith('$')) {
       const mathContent = [];
-      let currentLine = line.replace(/^\$\$/, ''); // Remove opening $$
-      
-      // If the line also ends with $$, it's a single-line display math
-      if (currentLine.endsWith('$$')) {
-        const expression = currentLine.replace(/\$\$$/, '').trim();
-        blocks.push({
-          object: "block",
-          type: "equation",
-          equation: {
-            expression: expression
-          }
-        });
-      } else {
-        // Multi-line display math
-        if (currentLine) mathContent.push(currentLine);
+      i++;
+      while (i < lines.length && !lines[i].trim().endsWith('$')) {
+        mathContent.push(lines[i]);
         i++;
-        
-        while (i < lines.length && !lines[i].trim().endsWith('$$')) {
-          mathContent.push(lines[i]);
-          i++;
-        }
-        
-        if (i < lines.length) {
-          const lastLine = lines[i].replace(/\$\$$/, '').trim();
-          if (lastLine) {
-            mathContent.push(lastLine);
-          }
-        }
-
-        blocks.push({
-          object: "block",
-          type: "equation",
-          equation: {
-            expression: mathContent.join('\n').trim()
-          }
-        });
       }
+      if (i < lines.length) {
+        const lastLine = lines[i].replace('$', '').trim();
+        if (lastLine) {
+          mathContent.push(lastLine);
+        }
+      }
+
+      blocks.push({
+        object: "block",
+        type: "equation",
+        equation: {
+          expression: mathContent.join('\n').trim()
+        }
+      });
     }
-    // Handle code blocks (```...```) 
+    // Handle code blocks (```...```)
     else if (line.startsWith('```')) {
       const codeContent = [];
       const language = line.replace('```', '').trim() || 'plain text';
@@ -224,7 +239,7 @@ function parseMarkdownWithMath(markdownContent) {
       });
     }
     // Handle regular paragraphs
-    else if (line && !line.startsWith('$$')) {
+    else if (line && !line.startsWith('$')) {
       blocks.push({
         object: "block",
         type: "paragraph",
@@ -254,12 +269,12 @@ function parseMarkdownWithMath(markdownContent) {
 function processRichText(text) {
   const richText = [];
   
-  // FIXED: Detectar ecuaciones matemáticas inline con $...$
+  // Primero, encontrar todas las ecuaciones matemáticas y reemplazarlas temporalmente
   const mathPlaceholders = [];
   let tempText = text;
   let mathIndex = 0;
   
-  // Reemplazar ecuaciones matemáticas inline con placeholders
+  // Reemplazar ecuaciones matemáticas con placeholders
   tempText = tempText.replace(/\$([^$\n]+)\$/g, (match, equation) => {
     const placeholder = `__MATH_${mathIndex}__`;
     mathPlaceholders[mathIndex] = equation.trim();
