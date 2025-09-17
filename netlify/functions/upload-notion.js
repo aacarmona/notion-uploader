@@ -124,7 +124,8 @@ function parseMarkdownWithMath(markdownContent) {
         }
         
         if (i < lines.length) {
-          const lastLine = lines[i].replace(/\$\$$/, '').trim();
+          const trimmedLastLine = lines[i].trim();
+          const lastLine = trimmedLastLine.replace(/\$\$$/, '');
           if (lastLine) {
             mathContent.push(lastLine);
           }
