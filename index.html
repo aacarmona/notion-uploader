@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Notion Markdown Uploader</title>
+    <title>Notion Markdown Uploader - CORS Fix</title>
     <style>
         * {
             margin: 0;
@@ -228,29 +228,39 @@
             color: #ed8936;
         }
 
-        .help-section {
-            background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
-            border-radius: 15px;
-            padding: 20px;
-            margin-top: 20px;
-            font-size: 0.9em;
+        .debug-section {
+            background: #fed7d7;
+            border: 1px solid #f56565;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px 0;
+            display: none;
         }
 
-        .help-section h3 {
-            color: #744210;
+        .debug-section h3 {
+            color: #c53030;
             margin-bottom: 10px;
         }
 
-        .help-section p {
-            color: #975a16;
-            line-height: 1.5;
+        .debug-section pre {
+            background: #fff;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 0.8em;
+            overflow-x: auto;
         }
 
-        .help-section code {
-            background: rgba(116, 66, 16, 0.1);
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-family: 'Monaco', 'Menlo', monospace;
+        .test-section {
+            background: #e6fffa;
+            border: 1px solid #38b2ac;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .test-section h3 {
+            color: #2c7a7b;
+            margin-bottom: 10px;
         }
 
         @media (max-width: 768px) {
@@ -272,12 +282,18 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>📝 Notion Markdown Uploader</h1>
-            <p>Upload your .md files to Notion with math equation support</p>
+            <h1>🔧 Notion Uploader - Debug Version</h1>
+            <p>Version con diagnósticos para resolver el error "Failed to fetch"</p>
+        </div>
+
+        <div class="test-section">
+            <h3>🧪 Diagnóstico Automático</h3>
+            <button class="btn" onclick="runDiagnostics()">Ejecutar Diagnóstico</button>
+            <div id="diagnosticResults"></div>
         </div>
 
         <div class="config-section">
-            <h2>⚙️ Configuration</h2>
+            <h2>⚙️ Configuración</h2>
             <div class="form-group">
                 <label for="notionToken">Notion Integration Token:</label>
                 <input type="password" id="notionToken" placeholder="secret_your_token_here">
@@ -286,9 +302,7 @@
                 <label for="parentPageId">Parent Page ID:</label>
                 <input type="text" id="parentPageId" placeholder="abc123def456...">
             </div>
-            <button class="btn" onclick="saveConfig()">
-                💾 Save Configuration
-            </button>
+            <button class="btn" onclick="saveConfig()">💾 Guardar y Probar Conexión</button>
         </div>
 
         <div class="upload-section">
@@ -309,26 +323,20 @@
                 <input type="text" id="pageTitle" placeholder="Will use filename if empty">
             </div>
             
-            <button class="btn" id="uploadBtn" onclick="uploadFile()" disabled>
-                🚀 Upload to Notion
-            </button>
+            <button class="btn" id="uploadBtn" onclick="uploadFile()" disabled>🚀 Upload to Notion</button>
             
             <div class="progress-bar" id="progressBar">
                 <div class="progress-fill" id="progressFill"></div>
             </div>
         </div>
 
-        <div class="status-section" id="statusLog">
-            <div class="info">🌟 Ready! Configure your credentials and drop a .md file to get started.</div>
+        <div class="debug-section" id="debugSection">
+            <h3>🐛 Debug Information</h3>
+            <pre id="debugInfo"></pre>
         </div>
 
-        <div class="help-section">
-            <h3>📚 Quick Help</h3>
-            <p>
-                <strong>Math Support:</strong> Use <code>$inline$</code> for inline equations and <code>$$block$$</code> for block equations.<br>
-                <strong>Get Token:</strong> Visit <a href="https://www.notion.so/my-integrations" target="_blank">notion.so/my-integrations</a><br>
-                <strong>Page ID:</strong> Copy from your Notion page URL (part after the last dash)
-            </p>
+        <div class="status-section" id="statusLog">
+            <div class="info">🔧 Debug version loaded. Click "Ejecutar Diagnóstico" to start troubleshooting.</div>
         </div>
     </div>
 
@@ -343,6 +351,139 @@
         document.getElementById('notionToken').value = config.notionToken;
         document.getElementById('parentPageId').value = config.parentPageId;
 
+        function showDebug(info) {
+            document.getElementById('debugSection').style.display = 'block';
+            document.getElementById('debugInfo').textContent = JSON.stringify(info, null, 2);
+        }
+
+        async function runDiagnostics() {
+            const resultsDiv = document.getElementById('diagnosticResults');
+            resultsDiv.innerHTML = '<div style="margin-top: 10px;">🔍 Running diagnostics...</div>';
+            
+            const results = [];
+            
+            // Test 1: Check browser capabilities
+            results.push({
+                test: "Browser Support",
+                status: typeof fetch !== 'undefined' ? "✅ PASS" : "❌ FAIL",
+                details: `Fetch API: ${typeof fetch !== 'undefined' ? 'Available' : 'Not Available'}`
+            });
+
+            // Test 2: Check CORS
+            try {
+                const response = await fetch('https://httpbin.org/get', { method: 'GET' });
+                results.push({
+                    test: "CORS Test",
+                    status: "✅ PASS",
+                    details: "Browser can make external requests"
+                });
+            } catch (error) {
+                results.push({
+                    test: "CORS Test",
+                    status: "⚠️ WARNING",
+                    details: `CORS might be blocked: ${error.message}`
+                });
+            }
+
+            // Test 3: Check localStorage
+            try {
+                localStorage.setItem('test', 'test');
+                localStorage.removeItem('test');
+                results.push({
+                    test: "LocalStorage",
+                    status: "✅ PASS",
+                    details: "LocalStorage working"
+                });
+            } catch (error) {
+                results.push({
+                    test: "LocalStorage",
+                    status: "❌ FAIL",
+                    details: `LocalStorage blocked: ${error.message}`
+                });
+            }
+
+            // Test 4: Check configuration
+            const hasToken = config.notionToken && config.notionToken.length > 10;
+            const hasPageId = config.parentPageId && config.parentPageId.length > 10;
+            results.push({
+                test: "Configuration",
+                status: hasToken && hasPageId ? "✅ PASS" : "❌ FAIL",
+                details: `Token: ${hasToken ? 'Present' : 'Missing'}, Page ID: ${hasPageId ? 'Present' : 'Missing'}`
+            });
+
+            // Display results
+            let html = '<div style="margin-top: 15px;">';
+            results.forEach(result => {
+                html += `
+                    <div style="margin: 10px 0; padding: 10px; background: white; border-radius: 5px;">
+                        <strong>${result.test}:</strong> ${result.status}<br>
+                        <small style="color: #666;">${result.details}</small>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            
+            resultsDiv.innerHTML = html;
+            log('🧪 Diagnostics completed');
+        }
+
+        async function testNotionConnection() {
+            if (!config.notionToken || !config.parentPageId) {
+                log('⚠️ Please configure token and page ID first', 'warning');
+                return false;
+            }
+
+            log('🔄 Testing Notion API connection...', 'info');
+
+            try {
+                // Try to fetch the parent page to test connection
+                const response = await fetch(`https://api.notion.com/v1/pages/${config.parentPageId}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${config.notionToken}`,
+                        'Notion-Version': '2022-06-28'
+                    }
+                });
+
+                const responseData = await response.text();
+                
+                showDebug({
+                    url: `https://api.notion.com/v1/pages/${config.parentPageId}`,
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: Object.fromEntries(response.headers.entries()),
+                    response: responseData
+                });
+
+                if (response.ok) {
+                    log('✅ Notion API connection successful!', 'success');
+                    return true;
+                } else {
+                    log(`❌ Notion API error: ${response.status} - ${response.statusText}`, 'error');
+                    log(`Response: ${responseData}`, 'error');
+                    return false;
+                }
+
+            } catch (error) {
+                log(`❌ Connection failed: ${error.message}`, 'error');
+                showDebug({
+                    error: error.message,
+                    stack: error.stack,
+                    type: error.constructor.name
+                });
+                
+                // Specific error handling
+                if (error.message.includes('Failed to fetch')) {
+                    log('💡 This is likely a CORS issue. Try these solutions:', 'warning');
+                    log('1. Make sure you\'re accessing the page via HTTPS (not file://)', 'warning');
+                    log('2. Try running from a local server instead of opening the file directly', 'warning');
+                    log('3. Check if your browser blocks cross-origin requests', 'warning');
+                }
+                
+                return false;
+            }
+        }
+
         function saveConfig() {
             config.notionToken = document.getElementById('notionToken').value;
             config.parentPageId = document.getElementById('parentPageId').value;
@@ -350,7 +491,10 @@
             localStorage.setItem('notionToken', config.notionToken);
             localStorage.setItem('parentPageId', config.parentPageId);
             
-            log('✅ Configuration saved locally!', 'success');
+            log('💾 Configuration saved!', 'success');
+            
+            // Test connection immediately
+            testNotionConnection();
             updateUploadButton();
         }
 
@@ -442,7 +586,7 @@
             progressFill.style.width = '30%';
 
             try {
-                log('🚀 Reading file...', 'info');
+                log('📖 Reading file...', 'info');
                 const content = await readFileAsText(selectedFile);
                 
                 progressFill.style.width = '60%';
@@ -459,14 +603,28 @@
                 log('✅ Upload successful!', 'success');
                 log(`📄 Page URL: ${result.url || 'N/A'}`, 'success');
                 
-                // Reset form
                 setTimeout(() => {
                     resetForm();
                 }, 2000);
                 
             } catch (error) {
                 log(`❌ Upload failed: ${error.message}`, 'error');
-                console.error('Upload error:', error);
+                showDebug({
+                    error: error.message,
+                    stack: error.stack,
+                    selectedFile: selectedFile ? {
+                        name: selectedFile.name,
+                        size: selectedFile.size,
+                        type: selectedFile.type
+                    } : null,
+                    config: {
+                        hasToken: !!config.notionToken,
+                        tokenLength: config.notionToken ? config.notionToken.length : 0,
+                        hasPageId: !!config.parentPageId,
+                        pageIdLength: config.parentPageId ? config.parentPageId.length : 0
+                    }
+                });
+                console.error('Full error:', error);
             } finally {
                 uploadBtn.disabled = false;
                 setTimeout(() => {
@@ -504,6 +662,8 @@
                 children: blocks
             };
 
+            log('🔄 Making API call to Notion...', 'info');
+            
             const response = await fetch('https://api.notion.com/v1/pages', {
                 method: 'POST',
                 headers: {
@@ -514,12 +674,32 @@
                 body: JSON.stringify(data)
             });
 
+            const responseText = await response.text();
+            
+            showDebug({
+                request: {
+                    url: 'https://api.notion.com/v1/pages',
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${config.notionToken.substring(0, 20)}...`,
+                        'Content-Type': 'application/json',
+                        'Notion-Version': '2022-06-28'
+                    },
+                    bodySize: JSON.stringify(data).length
+                },
+                response: {
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: Object.fromEntries(response.headers.entries()),
+                    body: responseText
+                }
+            });
+
             if (!response.ok) {
-                const errorData = await response.text();
-                throw new Error(`API Error ${response.status}: ${errorData}`);
+                throw new Error(`API Error ${response.status}: ${responseText}`);
             }
 
-            return await response.json();
+            return JSON.parse(responseText);
         }
 
         function parseMarkdownWithMath(markdownContent) {
